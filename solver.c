@@ -214,7 +214,20 @@ Number_array parse_file(const char* filename)
     return number_array;
 }
 
-
+size_t calculate_len_char(Number_ptr_array sequence)
+{
+    assert(sequence.items != NULL);
+    size_t count = 0;
+    for (size_t i = 0; i < sequence.count; i++) {
+        if (i == sequence.count - 1) {  // last
+            count += NUMBER_WIDTH;
+        }
+        else {
+            count += NUMBER_WIDTH - KEY_WIDTH;
+        }
+    }
+    return count;
+}
 void print_sequence_pretty(Number_ptr_array sequence)
 {
     assert(sequence.items != NULL);
@@ -390,7 +403,8 @@ int main()
     printf("\nResult: \n");
     print_sequence_pretty(g_longest_sequence);
     //print_sequence(g_longest_sequence);
-    printf("len: %zu\n", g_longest_sequence.count);
+    printf("Nodes count: %zu\n", g_longest_sequence.count);
+    printf("Length in chars: %zu\n", calculate_len_char(g_longest_sequence));
 
     return 0;
 }
