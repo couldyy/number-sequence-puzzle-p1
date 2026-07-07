@@ -307,6 +307,11 @@ void find_longest_sequence(Number_array number_array)
 
     for (size_t i = 0; i < number_array.count; i++) {
         Number* current_number = &(number_array.items[i]);
+        // non-starters (if node has a parent, that means it is already not the starter for longest sequence)
+        if (current_number->nodes_in.count != 0 ||  
+            current_number->nodes_in.count == 0 && current_number->nodes_out.count == 0) {   // orphans
+            continue;
+        }
         current_number->is_used = true;
 
         printf("[%d]: %ld\n", i, current_number->num_full);
