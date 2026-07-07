@@ -74,7 +74,7 @@
 #define MARENA_PAGEMISS_PER_ALLOC(arena) ((float)(arena)->_pagemiss_cnt / (float)(arena)->_allocs_cnt)   // global counters
 
 // pointer to that struct is actual start of page, usable memory is at &page + sizeof(Page)
-//  'free' contains start address of free memory in that page
+//  'start_free' contains start address of free memory in that page
 typedef struct Page {
     void* start_free;   // pointer (offset from the begining) to the start of allocatable memory in page
     size_t allocated;    // bytes
@@ -178,7 +178,19 @@ Page* init_page(size_t size)
     return page;
 }
 
+void* arena_realloc(Arena* arena, void* old_ptr, size_t old_size, size_t new_size)
+{
+    assert(arena != NULL);
 
+    // TODO: would be nice to also change metadata of the page of requested 'old_ptr' but it will require a lot of time to find that page
+    if (new_size <= old_size) {
+        return old_ptr;
+    }
+    // quick way of realloc, implement more optimal later
+    void* new_ptr = arena__alloc_flag(arena, new_size, 0);
+    memcpy(new_ptr, old_ptr, old_size);
+    return new_ptr;
+}
 // alloc with internal flags
 void* arena__alloc_flag(Arena* arena, size_t size, int flags)
 {
