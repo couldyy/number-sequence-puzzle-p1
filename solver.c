@@ -1,3 +1,10 @@
+/* NOTE:
+        There are few places in code, where you will see an 'if (0 ...) { }'. Those are for manual branch activation and 
+    are left here intentionally, since they are usefull for debugging or activating additional features (like printing
+    when 2 paths with same length are found).
+*/
+
+
 #include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
@@ -7,11 +14,6 @@
 
 #define MARENA_IMPLEMENTATION
 #include "thirdparty/marena.h"
-
-/*
-    TODO: check whether there are path with equal length but different nodes. What to do in this case?
-
-*/
 
 #define NUMBER_WIDTH 6
 #define KEY_WIDTH 2
@@ -24,9 +26,7 @@
 #define da_init(arr_ptr, new_capacity) \
     do { \
         assert((arr_ptr) != NULL && (new_capacity) > 0); \
-        /*(arr_ptr)->items = malloc(sizeof(*((arr_ptr)->items)) * (new_capacity)); */\
         (arr_ptr)->items = arena_alloc(&g_arena, sizeof(*((arr_ptr)->items)) * (new_capacity)); \
-        assert((arr_ptr)->items != NULL && "malloc() failed"); \
         (arr_ptr)->capacity = (new_capacity); \
     } while (0)
 
@@ -35,9 +35,7 @@
     do { \
         assert((arr_ptr) != NULL); \
         size_t _new_capacity = (arr_ptr)->capacity * DA_CAPACITY_MUL_FACTOR; \
-        /*(arr_ptr)->items = realloc((arr_ptr)->items, _new_capacity * sizeof(*((arr_ptr)->items))); */\
         (arr_ptr)->items = arena_realloc(&g_arena, (arr_ptr)->items, (arr_ptr)->capacity * sizeof(*((arr_ptr)->items)), _new_capacity * sizeof(*((arr_ptr)->items))); \
-        assert((arr_ptr)->items != NULL && "realloc() failed"); \
         (arr_ptr)->capacity = _new_capacity; \
     } while (0)
 
@@ -76,7 +74,7 @@
     do { \
         assert((arr_ptr) != NULL); \
         assert((arr_ptr)->items != NULL); \
-        /* free((arr_ptr)->items); */ /* in case of arena, dont do anything, since there are no way to free specific region */\
+        /* free((arr_ptr)->items); */ /* in case of arena, dont do anything, since there is no way to free specific region */\
     } while (0)
 
 #define da_cpy(da_dst, da_src)  \
@@ -123,19 +121,6 @@ Arena g_arena = {0};
 Number_ptr_array g_longest_sequence = {0};
 
 
-//void buckets_free(Buckets_table* buckets_table)
-//{
-//    assert(buckets_table != NULL);
-//    for (size_t i = 0; i < buckets_table->capacity; i++) {
-//        Number_ptr_array* current_bucket = &(buckets_table->buckets[i]);
-//        if (current_bucket->items != NULL) {
-//            da_free(current_bucket);
-//        }
-//    }
-//    //free(buckets_table->buckets);
-//}
-
-
 void buckets_fill(Buckets_table* key_buckets, Number_array numbers)
 {
     assert(key_buckets != NULL);
@@ -155,9 +140,7 @@ void nodes_connect_by_key(Number_array numbers)
     assert(numbers.items != NULL); 
 
     Buckets_table buckets_table = {0};
-    //buckets_table.buckets = calloc(numbers.count, sizeof(Number_ptr_array));
     buckets_table.buckets = arena_alloc_zero(&g_arena, numbers.count * sizeof(Number_ptr_array));
-    //assert(buckets_table.buckets != NULL && "calloc() failed");
     buckets_table.capacity = numbers.count;
 
     buckets_fill(&buckets_table, numbers);
@@ -170,21 +153,19 @@ void nodes_connect_by_key(Number_array numbers)
             da_append(&(key_bucket->items[j]->nodes_in), current_number);
         }
     }
-   
-    //buckets_free(&buckets_table);
 }
 
 Number parse_number(char* num_str, size_t num_str_len)
 {
     assert(num_str != NULL);
 
-    char* buff_err[num_str_len] = {}; 
+    char* invalid_char_addr_start = NULL;
     //memset(buff_err, 0, num_str_len);
 
-    long num = strtol(num_str, buff_err, 10);
-    if (*buff_err[0] != '\0') {
+    long num = strtol(num_str, &invalid_char_addr_start, 10);
+    if (invalid_char_addr_start[0] != '\0') {
         fprintf(stderr, "Invalid characters in number '%s'\n", num_str);
-        printf("%s\n", *buff_err);
+        printf("%s\n", invalid_char_addr_start);
         printf("^ starting from\n");
         exit(1);
     }
@@ -212,31 +193,27 @@ Number_array parse_file(const char* filename)
     Number_array number_array = {0};
 
     size_t file_line_buff_size = BUFFER_SIZE;
-    char* file_line_buff = malloc(file_line_buff_size);
-    assert(file_line_buff != NULL && "malloc() failed");
-
+    char* file_line_buff = arena_alloc(&g_arena, file_line_buff_size);
 
     ssize_t read_bytes; 
     while ((read_bytes = getline(&file_line_buff, &file_line_buff_size, inputs_file)) > 0) {
         // remove new line, since strtol() treats it as invalid 
-        if (file_line_buff[read_bytes - 1] == '\n') {
+        if (file_line_buff[read_bytes - 1] == '\n' || file_line_buff[read_bytes - 1] == '\r') {
             file_line_buff[read_bytes - 1] = '\0';
         }
         //printf("%s\n", file_line_buff);
         //Number number = parse_number(file_line_buff, read_bytes);
         da_append(&number_array, parse_number(file_line_buff, read_bytes));   // TODO: read_bytes should be -1?
-        //da_append(&number_array, number);   // TODO: read_bytes should be -1?
-        //printf("(%ld) %ld (%ld) --> \n", number.key_start, number.num_full, number.key_end);
     }
     if (!feof(inputs_file)) {
         fprintf(stderr, "Error reading file '%s': %s\n", filename, strerror(errno));
         exit(1);
     }
 
-    free(file_line_buff);
     fclose(inputs_file);
     return number_array;
 }
+
 
 void print_sequence_pretty(Number_ptr_array sequence)
 {
@@ -263,7 +240,21 @@ void print_sequence(Number_ptr_array sequence)
     printf("\n");
 }
 
-void find_longest_sequence_for_node(Number_array number_array, Number* node, Number_ptr_array* current_sequence, size_t depth) 
+bool check_sequence(Number_ptr_array number_ptr_array)
+{
+    for (size_t i = 0; i < number_ptr_array.count; i++) {
+        Number* current_elem = number_ptr_array.items[i];
+        for (size_t k = 0; k < number_ptr_array.count; k++) {
+            if (k != i && number_ptr_array.items[k]->num_full == current_elem->num_full) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// traverse graph until the last node and than compare sequence against global longest one (g_longest_sequence)
+void find_longest_sequence_for_node(Number_array number_array, Number* node, Number_ptr_array* current_sequence) 
 {
     da_append(current_sequence, node);
     node->is_used = true;
@@ -272,27 +263,29 @@ void find_longest_sequence_for_node(Number_array number_array, Number* node, Num
     for (size_t i = 0; i < node->nodes_out.count; i++) {
         Number* current_number = node->nodes_out.items[i];
         if (current_number->is_used) {
-            //printf("%ld in use, depth: %zu\n", current_number->num_full, depth);
             continue;
         }
-        current_sequence->count = depth + 1;    // reset array for each node 
         available_next_node_count++;
 
-        find_longest_sequence_for_node(number_array, current_number, current_sequence, depth + 1);
+        find_longest_sequence_for_node(number_array, current_number, current_sequence);
     }
 
     // even if there are nodes_out in current number, all of them may already be used, meaning this is an end of sequence  
     if (node->nodes_out.count == 0 || available_next_node_count == 0) {  // tail
-
+        if (0 && current_sequence->count == g_longest_sequence.count && current_sequence->count > 66) {
+            printf("Equal: [%ld -> %ld] [%ld -> %ld] len: %zu\n", 
+                g_longest_sequence.items[0]->num_full, g_longest_sequence.items[g_longest_sequence.count - 1]->num_full,
+                current_sequence->items[0]->num_full, current_sequence->items[current_sequence->count - 1]->num_full,
+                current_sequence->count);
+        }
         if (current_sequence->count > g_longest_sequence.count) {
             memcpy((g_longest_sequence.items), (current_sequence->items), current_sequence->count * sizeof(*(current_sequence->items)));
             g_longest_sequence.count = current_sequence->count;
         }
-        goto ret;
     }
 
-ret:
     node->is_used = false;
+    current_sequence->count--;  // pop each element of sequence
 }
 
 
@@ -302,22 +295,17 @@ void find_longest_sequence(Number_array number_array)
     Number_ptr_array current_sequence = {0};    
     da_init(&current_sequence, number_array.count);
 
-
-    //Arena_mark mark_start_iter = arena_mark(&g_arena); 
-
     for (size_t i = 0; i < number_array.count; i++) {
         Number* current_number = &(number_array.items[i]);
-        // non-starters (if node has a parent, that means it is already not the starter for longest sequence)
-        if (current_number->nodes_in.count != 0 ||  
-            current_number->nodes_in.count == 0 && current_number->nodes_out.count == 0) {   // orphans
+        if (current_number->nodes_in.count == 0 && current_number->nodes_out.count == 0) {   // skip orphans
             continue;
         }
         current_number->is_used = true;
 
         printf("[%d]: %ld\n", i, current_number->num_full);
 
-        da_reset(&current_sequence);    // 'find_longest_sequence_for_node()' reset only to the last added elemend, i.e. it will add nodes on each top-level iteration and NOT remove them
-        find_longest_sequence_for_node(number_array, current_number, &current_sequence, 0);
+        //da_reset(&current_sequence);    // 'find_longest_sequence_for_node()' reset only to the last added elemend, i.e. it will add nodes on each top-level iteration and NOT remove them
+        find_longest_sequence_for_node(number_array, current_number, &current_sequence);
 
         //print_sequence(longest_for_node);        
         current_number->is_used = false;
@@ -389,7 +377,7 @@ const char* filename = "source.txt";
 //const char* filename = "source_small.txt";
 int main()
 {
-    g_arena.page_size = 8192;
+    g_arena.page_size = 16 * 1024;
 
 
     Number_array number_array = parse_file(filename);
@@ -401,12 +389,8 @@ int main()
 
     printf("\nResult: \n");
     print_sequence_pretty(g_longest_sequence);
-    //print_sequence(longest_sequence);
+    //print_sequence(g_longest_sequence);
     printf("len: %zu\n", g_longest_sequence.count);
 
-    //for (size_t i = 0; i < number_array.count; i++) {
-    //    Number* current_number = &(number_array.items[i]);
-    //    printf("(%ld) %ld (%ld)\n", current_number->key_start, current_number->num_full, current_number->key_end);
-    //}
     return 0;
 }
